@@ -277,8 +277,8 @@ static HICON make_icon(int size, int pct, int charging)
         round_rect(dc, bx + pad, by + pad, bx + pad + fw, by + bh - pad, size / 12, fill, fill);
     }
 
-    /* 充电闪电 */
-    if (charging) {
+    /* 充电闪电:满电(100%)后停止显示,避免"充电中"常驻 */
+    if (charging && pct > 0 && pct < 100) {
         POINT bolt[6] = {
             { size * 18 / 32, size * 10 / 32 }, { size * 12 / 32, size * 22 / 32 },
             { size * 16 / 32, size * 22 / 32 }, { size * 14 / 32, size * 30 / 32 },
@@ -342,9 +342,11 @@ static void update_tray(void)
     g_icon = icon;
     g_nid.hIcon = icon;
 
-    if (g_connected && g_percent >= 0)
+    if (g_connected && g_percent >= 0) {
+        int is_chg = g_charging && g_percent < 100;   /* 满电不再显示充电中 */
         _snwprintf(g_nid.szTip, 127, L"%s: %d%%%s", g_devname, g_percent,
-                   g_charging ? L" (充电中)" : L"");
+                   is_chg ? L" (充电中)" : L"");
+    }
     else if (g_connected)
         wcsncpy(g_nid.szTip, L"正在读取鼠标电量...", 127);
     else
@@ -455,13 +457,15 @@ static void popup_paint(HWND hwnd)
     RECT r2 = { 20, 34, POPUP_W - 20, 96 };
     DrawTextW(mem, big, -1, &r2, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    /* 状态文本 */
+    /* 状态文本:满电不再显示充电状态 */
+    int is_chg = g_charging && g_percent < 100;
     SelectObject(mem, fTitle);
-    SetTextColor(mem, g_charging ? RGB(64, 156, 255) : RGB(160, 160, 170));
+    SetTextColor(mem, is_chg ? RGB(64, 156, 255) : RGB(160, 160, 170));
     const wchar_t *st;
     if (!g_connected)          st = L"请将鼠标连接或靠近接收器";
     else if (g_stale && g_percent < 0) st = L"正在读取电量...";
-    else if (g_charging)       st = L"⚡ 充电中";
+    else if (is_chg)           st = L"⚡ 充电中";
+    else if (g_percent >= 100) st = L"已充满";
     else                       st = L"放电中";
     RECT r3 = { 20, 96, POPUP_W - 20, 120 };
     DrawTextW(mem, st, -1, &r3, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
@@ -562,9 +566,11 @@ static void show_menu(void)
     refresh_battery();   /* 先刷新,菜单里显示实时值 */
     HMENU m = CreatePopupMenu();
     wchar_t label[128];
-    if (g_connected && g_percent >= 0)
+    if (g_connected && g_percent >= 0) {
+        int is_chg = g_charging && g_percent < 100;   /* 满电不再显示充电中 */
         _snwprintf(label, 127, L"%s  %d%%%s", g_devname, g_percent,
-                   g_charging ? L" 充电中" : L"");
+                   is_chg ? L" 充电中" : L"");
+    }
     else if (g_connected)
         wcsncpy(label, L"正在读取鼠标电量...", 127);
     else
